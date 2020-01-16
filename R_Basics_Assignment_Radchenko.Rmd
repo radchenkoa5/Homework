@@ -1,0 +1,50 @@
+---
+title: "R_basics_Assignment_Radchenko"
+author: "Anna Radchenko"
+date: "January 14, 2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+
+```{r}
+tgpp <- read.csv("~/R/R_basics/tgpp.csv") #Start of Lesson 1
+```
+
+#What are the names of the columns in this dataset?
+```{r}
+colnames(tgpp)
+```
+
+#How many rows and columns does this data file have?
+```{r}
+dim(tgpp)
+```
+#4080 Rows and 11 columns
+
+#What kind of object is each data column? Hint: checkout the function sapply().
+```{r}
+sapply(tgpp, class) #don't have to put anything in the function, just name them!
+```
+
+#What are the values of the the datafile for rows 1, 5, and 8 at columns 3, 7, and 10
+```{r}
+tgpp[c(1,5,8),c(3,7,10)]
+ #row then column
+```
+
+```{r}
+SR <- plot(richness~scale, data = tgpp, xlab = 'Scale (m^2)', ylab = 'Richness', main = 'Scale vs. Richness', col = '#2E9FDF')
+pdf('~/R/R_basics/Species_richness.fig1.pdf')
+dev.off()
+```
+
+
+
+#What happens to your plot when you set the plot argument log equal to 'xy'. plot(..., log='xy')
+```{r}
+plot(richness~scale, data = tgpp, xlab = 'log (Scale (m^2))', ylab = 'log(Richness)', main = 'Scale vs. Richness', col = 2, log = 'xy')
+```
+#Changes both axis to the log scale
