@@ -1,0 +1,296 @@
+---
+title: "Univariate Assignment_Radchenko"
+author: "Anna Radchenko"
+date: "January 26, 2020"
+output: html_document
+---
+---
+layout: page
+---
+
+## Univariate Assignment
+
+Read in tree data
+
+```{r}
+tree <- read.csv("~/R/R_basics/treedata.csv")
+```
+
+Examine this dataset and see how the data is structured, see function `str` 
+
+The contents of the metadata file (`./data/tree_metadata.txt`) is provided here:
+```{r}
+str(tree)
+```
+
+
+The dataset includes tree abundances from a subset of a vegetation database of Great Smoky Mountains National Park (TN, NC).
+
+* plotID: unique code for each spatial unit (note some sampled more than once)
+* date: when species occurrence recorded
+* plotsize: size of quadrat in m2
+* spcode: unique 7-letter code for each species
+* species: species name
+* cover: local abundance measured as estimated horizontal cover (ie, relative area of shadow if sun is directly above) classes 1-10 are: 1=trace, 2=0-1%, 3=1-2%, 4=2-5%, 5=5-10%, 6=10-25%, 7=25-50%, 8=50-75%, 9=75-95%, 10=95-100%
+* utme: plot UTM Easting, zone 17 (NAD27 Datum)
+* utmn: plot UTM Northing, zone 17 (NAD27 Datum)
+* elev: elevation in meters from a digital elevation model (10 m res)
+* tci: topographic convergence index, or site "water potential"; measured as the upslope contributing area divided by the tangent of the slope angle (Beven and Kirkby 1979)
+* streamdist: distance of plot from the nearest permanent stream (meters)
+* disturb: plot disturbance history (from a Park report); CORPLOG=corporate logging; SETTLE=concentrated settlement, VIRGIN="high in virgin attributes", LT-SEL=light or selective logging
+* beers: transformed slope aspect ('heat load index'); 0 is SW (hottest), 2 is NE (coolest)
+
+![](../smokies_transects.png) 
+
+Above shows a map of the regional and local location of the elevational transects included in the dataset (from [Fridley 2009](http://plantecology.syr.edu/fridley/Fridley2009_jamc.pdf)).
+
+
+1\. Carry out an exploratory analysis using the tree dataset. Metadata for the
+tree study can be found [here](../data/tree_metadata.txt). Specifically, I would
+like you to develop and compare models for species cover for a habitat
+generalist [*Acer rubrum* (Red
+maple)](http://www.durhamtownship.com/blog-archives/pix/November1407.jpg) and a
+habitat specialist [*Abies fraseri* (Frasier
+fir)](https://upload.wikimedia.org/wikipedia/commons/d/d0/Abies_fraseri_Mitchell.jpg).
+Because this dataset includes both continuous and discrete explanatory variables
+use the function `Anova` in the packages `car` as such
+
+
+```{r}
+ifelse(is.na(tree$cover),0, tree$cover)
+
+tree1 <- tapply(tree$cover, list(tree$plotID, tree$species), mean)
+data.frame(tree1)
+```
+
+```{r}
+aggregate(tree, list(tree$plotID), mean)
+```
+
+
+
+```{r}
+x <- subset(tree, subset = tree$species == 'Abies fraseri')
+y <- subset(tree, subset = tree$species == 'Acer rubrum')
+
+treesub <- data.frame(rbind(x,y))
+treesub <- droplevels(treesub)
+data.frame(treesub)
+```
+
+
+```{r}
+plot(cover ~ species, data = treesub, type = 'n', 
+    xlab = 'Species', ylab = 'Cover')
+```
+
+```{r}
+plot(treesub$cover ~ treesub$elev, subset = treesub$species == 'Abies fraseri')
+```
+
+
+
+
+```{r}
+mod_ab <- lm(treesub$cover ~ treesub$disturb, subset = treesub$species == 'Abies fraseri')
+summary(mod_ab)
+```
+
+
+1. Carry out an exploratory analysis using the tree dataset. Metadata for the tree study can be found here. Specifically, I would like you to develop and compare models for species cover for a habitat generalist Acer rubrum (Red maple) and a habitat specialist Abies fraseri (Frasier fir). Because this dataset includes both continuous and discrete explanatory variables use the function Anova in the packages car as such
+```{r}
+library(car)
+Anova1 <- Anova(mod_ab, type = 3)
+Anova1
+```
+
+
+```{r}
+summary(Anova1)
+```
+
+
+```{r}
+mod_ac <- lm(treesub$cover ~ treesub$disturb, subset = treesub$species == 'Acer rubrum')
+summary(mod_ac)
+Anova2 <- Anova(mod_ac, type = 3)
+Anova2
+```
+
+```{r}
+summary(Anova2)
+```
+
+```{r}
+mod_ab1 <- lm(treesub$cover ~ treesub$disturb*treesub$plotsize, subset = treesub$species == 'Abies fraseri')
+Anova3 <- Anova(mod_ab1, type =3)
+Anova3
+summary(Anova3)
+```
+
+```{r}
+mod_ac1 <- lm(treesub$cover ~ treesub$disturb*treesub$plotsize, subset = treesub$species == 'Acer rubrum')
+Anova4 <- Anova(mod_ac1, type =3)
+Anova4
+summary(Anova4)
+```
+```{r}
+ac1 <- lm(treesub$cover ~ treesub$beers*treesub$beers*treesub$plotsize*treesub$elev*treesub$streamdist*treesub$disturb, subset = treesub$species == 'Acer rubrum')
+summary (ac1)
+AIC (ac1)
+```
+```{r}
+abies <- lm(treesub$cover ~ treesub$elev, subset = treesub$species == 'Abies fraseri')
+summary(abies)
+AIC(abies)
+```
+```{r}
+abies1 <- lm(treesub$cover ~ treesub$streamdist, subset = treesub$species == 'Abies fraseri')
+summary(abies1)
+AIC (abies1)
+```
+
+```{r}
+abies1 <- lm(treesub$cover ~ treesub$beers, subset = treesub$species == 'Abies fraseri')
+summary(abies1)
+AIC(abies1)
+```
+```{r}
+abies1 <- lm(treesub$cover ~ treesub$elev*treesub$streamdist*treesub$beers, subset = treesub$species == 'Abies fraseri')
+summary(abies1)
+AIC(abies1)
+```
+```{r}
+Anova(abies1, type = 3)
+summary(Anova(abies1, type = 3))
+```
+
+
+The reported p-values from the Anovas are the maximum p-values reported by the summary function. Essentially they are the most conservative p-value, which takes into acount the full range of data, instead of a particular quartile. 
+
+Cover does not seem to be explained by disturbance alone or plot size for Abies fraseri or Acer rubrum.
+
+However, elevation does seem signifcant for Abies fraseri, but only explains ~ 29% of variation (p-value = 3.122 e -9). As does stream distance alone, which accounts for ~10% of variation (p = 0.000456). Beers accounts for ~11% of variation. When combining these three variables that seem signifcant, only ~40% of the variation seen in the data is explained. Based on the AIC value, this interaction model including elevation, beers, and stream distance is the best for Abies fraseri. However, since 60% of the variation is still unexplained, this is not the most reliable model for the data.
+
+```{r}
+acer <- lm(treesub$cover ~ treesub$elev, subset = treesub$species == 'Acer rubrum')
+summary(acer)
+AIC(acer)
+```
+```{r}
+acer <- lm(treesub$cover ~ treesub$streamdist, subset = treesub$species == 'Acer rubrum')
+summary(acer)
+AIC(acer)
+```
+```{r}
+acer <- lm(treesub$cover ~ treesub$beers, subset = treesub$species == 'Acer rubrum')
+summary(acer)
+AIC(acer)
+```
+
+```{r}
+acer <- lm(treesub$cover ~ treesub$plotsize, subset = treesub$species == 'Acer rubrum')
+summary(acer)
+AIC(acer)
+```
+```{r}
+
+```
+
+
+```{r}
+acer <- lm(treesub$cover ~ treesub$elev*treesub$streamdist*treesub$beers*treesub$plotsize, subset = treesub$species == 'Acer rubrum')
+summary(acer)
+AIC(acer)
+```
+```{r}
+Anova(acer, typer =3)
+summary(Anova(acer, typer =3))
+```
+The integrated model, including beers, stream distance, plot size, and elevation, explains the most variation in cover for Acer rubrum. However, it explains very little variation, only 5% which is much less than the integrated model created for Abies fraseri. This could be due to the variables that were tracked align more with Abies fraseri, than those that influence Acer rubrum. 
+
+Cover can only be positive integers and therefore does not meet Gaussian assumptions for OSL.
+
+For each species address the following additional questions:
+
+* how well does the exploratory model appear to explain cover?
+* which explanatory variables are the most important?
+* do model diagnostics indicate any problems with violations of OLS assumptions?
+* are you able to explain variance in one species better than another, 
+  why might this be the case?
+
+2. You may have noticed that the variable cover is defined as 
+positive integers between 1 and 10. and is therefore better treated
+as a discrete rather than continuous variable. 
+Re-examine your solutions to the question above but from the
+perspective of a General Linear Model (GLM) with a Poisson error term
+(rather than a Gaussian one as in OLS). 
+The Poisson distribution generates integers 0 to positive infinity so this may provide a good first approximation. 
+Your new model calls will look as follows:
+
+```r
+acer_poi = glm(cover ~ tci + elev + ... , data = my_data, 
+           family='poisson')
+```
+```{r}
+acer_poi = glm(cover ~ beers + elev + streamdist + plotsize, data = treesub, subset = treesub$species == 'Acer rubrum', family='poisson')
+acer_poi
+summary(acer_poi)
+plot(acer_poi)
+```
+```{r}
+pseudo_r2 = function(glm_mod) {
+                1 -  glm_mod$deviance / glm_mod$null.deviance
+            }
+pseudo_r2 (acer_poi)
+```
+Completing this model as a glm does explain ~1% more of the variation. 
+
+For assessing the degree of variation explained you can use a 
+pseudo-R-squared statistic (note this is just one of many possible)
+
+```r
+pseudo_r2 = function(glm_mod) {
+                1 -  glm_mod$deviance / glm_mod$null.deviance
+            }
+```
+```{r}
+abies_poi = glm(cover ~  beers + elev, data = treesub, subset = treesub$species == 'Abies fraseri', family='poisson')
+abies_poi
+summary(abies_poi)
+plot(abies_poi)
+```
+
+```{r}
+pseudo_r2(abies_poi)
+```
+For both Acer rubrum the same variables are still significant and explain the most variation in tree cover. However, for Abies fraseri, stream distance was no longer explained more variation in tree cover. In the general linear model for both species, there seemed to be a difference between the lower AIC and higher R2 values. There was a lower AIC for both models when the variables were simply added together, instead of looking for an interaction effect between them. However, the R2 was slighlty higher when taking the interaction effect into account. Without the interaction factor, the explained variation in cover is a few percent lower in both species, and a few percent higher if included.
+
+Compare your qualatitive assessment of which variables were most important in each model. 
+Does it appear that changing the error distribution changed the results much? In what ways? 
+
+3\. Provide a plain English summary (i.e., no statistics) of what you have
+found and what conclusions we can take away from your analysis?
+
+Acer rubrum tree cover is most explained by the variables beers, stream distance, plot size and elevation. Abies fraseri tree cover is most explained by beers and elevation. However, both of these models have low R2 values (lower for Acer rubrum) and do not fit the data that strongly. Therefore, other variables should be looked at to explain tree cover. 
+
+4\. (optional) Examine the behavior of the function `stepAIC()` using the 
+exploratory models developed above. This is a very simple and not very
+robust machine learning stepwise algorithm that uses AIC to select a 
+best model. By default it does a backward selection routine. 
+
+```{r}
+library(MASS)
+stepAIC(acer_poi)
+```
+```{r}
+stepAIC(abies_poi)
+```
+
+
+5\. (optional) Develop a model for the number of species in each site 
+(i.e., unique plotID). This variable will also be discrete so the Poisson
+may be a good starting approximation. Side note: the Poisson
+distribution converges asymptotically on the Gaussian distribution as the 
+mean of the distribution increases. Thus Poisson regression does not differ
+much from traditional OLS when means are large. 
