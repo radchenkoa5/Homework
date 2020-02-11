@@ -1,0 +1,128 @@
+---
+title: "Multivariate Modeling Radchenko"
+author: "Anna Radchenko"
+date: "February 6, 2020"
+output: html_document
+---
+---
+layout: page
+title: multivariate models
+---
+
+For this assignment will be analyzing data on the Vegetation
+and Environment in Dutch Dune Meadows.
+
+To import the data and read the metadata run the following:
+
+```{r}
+library(vegan)
+data(dune)
+data(dune.env)
+?dune
+head(dune)
+head(dune.env)
+```
+
+1. Conduct an indirect ordination on the dune plant community. Specifically,
+visually examine a NMDS (Non-metric multidimensional scaling) plot using the bray-curtis distance metric. Below is 
+some code to help you develop a potential plot that emphasizes the role of the
+environmental variable "Moisture". Describe how you interpret the
+graphic. What is the goal of creating such a plot? Does this analysis suggest
+any interesting findings with respect to the dune vegetation?
+
+```{r}
+dune_pca <- rda(dune, scale =TRUE)
+dune_pca
+```
+```{r}
+str(dune_pca)
+```
+```{r}
+plot(dune_pca)
+```
+```{r}
+biplot(dune_pca)
+```
+
+
+
+    ```{r}
+    plot(dune_pca, type='n')
+    text(dune_pca, 'sp', cex=.5)
+    # generate vector of colors 
+    color_vect = rev(terrain.colors(6))[-1]
+    points(dune_pca, 'sites', pch=19, 
+           col=color_vect[dune.env$Moisture])
+    legend('topright', paste("Moisture =", 1:5, sep=''), 
+           col=color_vect, pch=19)
+    ```
+
+```{r}
+dune_mds <- metaMDS(dune)
+dune_mds
+```
+```{r}
+dune_fit <- envfit(dune_mds, dune.env)
+dune_fit
+```
+
+```{r}
+dune_mds1 <- anova(dune_mds, permutations = 999)
+dune_mds1
+```
+
+```{r}
+plot(dune_mds, type='n')
+    text(dune_mds, 'sp', cex=.5)
+    # generate vector of colors 
+    color_vect = rev(terrain.colors(6))[-1]
+    points(dune_mds, 'sites', pch=19, 
+           col=color_vect[dune.env$Moisture])
+    plot(dune_fit, p.max = 0.01, cex = 0.75)
+    legend('topright', paste("Moisture =", 1:5, sep=''), 
+           col=color_vect, pch=19)
+```
+
+The NMDS model spreads out the species more, by focusing down the scale. This allows me to better visualize the trends of each species. The peach colored species labeled as moisture 1 need less moisture/are less effected by moisture than those in green on the positive side of the scale.
+
+2. Carry out a direct ordination using CCA in order to test any potential 
+hypotheses that you developed after examining the MDS plot. Specifically,
+carry out a test of the entire model (i.e., including all constrained axes)
+and also carry out tests at the scale of individual explanatory variables
+you included in your model if you included more than one variable. Plot your 
+results.
+
+```{r}
+dune_cca <- cca(dune~., data = dune.env)
+dune_cca
+```
+```{r}
+plot(dune_cca)
+```
+
+```{r}
+dune_cca_adr2 <- RsquareAdj(dune_cca, 30)
+dune_cca_adr2
+```
+```{r}
+anova(dune_cca, permutations = 999)
+```
+
+```{r}
+dune_cca1 <- anova(dune_cca, by='margin', permutations = 999) #pulls out and compares each variable
+```
+
+```{r}
+plot(dune_cca, type = 'n', scaling = 1)
+orditorp(dune_cca, display ='sp', cex=0.5, scaling=1, col='blue')
+text(dune_cca, display ='bp', col='red')
+```
+A1 is still the best model available, even though it is not significant. 
+
+3. Do your two analyses agree with one another or complement one another or do
+these two analyses seem to be suggesting different take home messages? Which
+analysis do you find to be more useful?
+
+The non-metric multidimensional scaling model seems to be more useful. The A1 model for the MDS explains more variables than the CCA model. The MDS has more direction and spreads out the data more based on the variables with it. Overall, the two analyses have the same take home message. 
+
+
