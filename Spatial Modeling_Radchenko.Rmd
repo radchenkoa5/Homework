@@ -1,0 +1,332 @@
+---
+title: "Spatial Models Assignment"
+author: "Anna Radchenko"
+date: "February 11, 2020"
+output: html_document
+---
+
+Collaborator: Emily Parsons
+```{r}
+library(vegan)
+data(BCI)
+## UTM Coordinates (in metres)
+BCI_xy = data.frame(x = rep(seq(625754, 626654, by=100), each=5), 
+                    y = rep(seq(1011569,  1011969, by=100), len=50))
+head(BCI)
+```
+
+```{r}
+head(BCI_xy)
+plot(BCI_xy)
+```
+```{r}
+sr = apply(BCI, 1, function(x) sum(x > 0))
+hist(sr) #calculating species richness for each site
+```
+```{r}
+plot(BCI_xy, cex = sr/max(sr))
+```
+
+```{r}
+col_brks = hist(sr, plot=F)$breaks
+col_indices = as.numeric(cut(sr, col_brks))
+cols = rev(terrain.colors(length(col_brks)))
+plot(BCI_xy, cex=2, pch=19, col=cols[col_indices])
+```
+```{r}
+sr_dist <- dist(sr)
+xy_dist <- dist(BCI_xy)
+
+max_dist = max(xy_dist) / 2
+
+# plot result
+plot(xy_dist, sr_dist)
+abline(lm(sr_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, sr_dist), lwd=3, col='pink')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+Doesn't really look like the residuals are spatially dependent/autocorrelated. Slope of the line is almost 0 even in the lowess. 
+
+```{r}
+colSums(BCI)
+```
+Faramea.occidentalis 1717 chosen as the abundant/common species
+Sapium.gladulosum 17 chosen as the rare species
+
+```{r}
+common <- BCI$Faramea.occidentalis
+rare <- BCI$Sapium.glandulosum
+common <- data.frame(common)
+rare <- data.frame(rare)
+```
+
+```{r}
+abundc = apply(common, 1, sum)
+hist(abundc)
+```
+
+
+```{r}
+col_brks = hist(abundc, plot=F)$breaks
+col_indices = as.numeric(cut(abundc, col_brks))
+cols = rev(terrain.colors(length(col_brks)))
+plot(BCI_xy, cex=2, pch=19, col=cols[col_indices])
+```
+
+
+```{r}
+abundc_dist <- dist(abundc)
+xy_dist <- dist(BCI_xy)
+
+max_dist = max(xy_dist) / 2
+
+# plot result
+plot(xy_dist, abundc_dist)
+abline(lm(abundc_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, abundc_dist), lwd=3, col='pink')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+It does not look like there is much autocorrelation or spatial dependence for the common species Faramea occidentalis.The slope of the residuals is almost zero along an increasing spatial distance. 
+
+```{r}
+abundr = apply(rare, 1, sum)
+hist(abundr)
+```
+
+```{r}
+col_brks = hist(abundr, plot=F)$breaks
+col_indices = as.numeric(cut(abundr, col_brks))
+cols = rev(terrain.colors(length(col_brks)))
+plot(BCI_xy, cex=2, pch=19, col=cols[col_indices])
+```
+
+```{r}
+abundr_dist <- dist(abundr)
+xy_dist <- dist(BCI_xy)
+
+max_dist = max(xy_dist) / 2
+
+# plot result
+plot(xy_dist, abundr_dist)
+abline(lm(abundr_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, abundr_dist), lwd=3, col='pink')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+
+
+```{r}
+obs_cor_c <- cor(xy_dist, abundc_dist)
+obs_cor_c
+```
+
+```{r}
+# carry out the same analysis using the function mantel()
+abundc_mantel = mantel(xy_dist, abundc_dist)
+abundc_mantel
+```
+
+```{r}
+# carry out a permutation test for significance:
+nperm = 1000
+null_cor = obs_cor_c
+for (i in 2:nperm) {
+    # shuffle the rows of the spatial coordinates
+    tmp_xy = BCI_xy[sample(nrow(BCI_xy)), ]
+    # correlation between the shuffled spatial coordinates and sr_dist
+    null_cor[i] = cor(dist(tmp_xy), abundc_dist)
+}
+# compute the p-value
+sum(null_cor >= obs_cor_c) / nperm 
+```
+
+```{r}
+# compare the two approaches graphically using stacked boxplots
+boxplot(list(null_cor, abundc_mantel$perm), horizontal = T, boxwex = 0.5,
+        names = c('mine', 'theirs'), xlab='Correlation')
+abline(v=obs_cor_c, col='red')
+```
+These figures and analyses indicate that there is no significant difference between a random spatial distribution and the observed distribution for Faramea occidentalis. Therefore, this common species is not spatially dependent. 
+
+```{r}
+obs_cor_r <- cor(xy_dist, abundr_dist)
+obs_cor_r #how correlated is distance and the residuals, low number means not very correlated
+```
+
+```{r}
+# carry out a permutation test for significance:
+nperm = 1000
+null_cor = obs_cor_r
+for (i in 2:nperm) {
+    # shuffle the rows of the spatial coordinates
+    tmp_xy = BCI_xy[sample(nrow(BCI_xy)), ]
+    # correlation between the shuffled spatial coordinates and sr_dist
+    null_cor[i] = cor(dist(tmp_xy), abundr_dist)
+}
+# compute the p-value
+sum(null_cor >= obs_cor_r) / nperm
+```
+
+```{r}
+# carry out the same analysis using the function mantel()
+abundr_mantel = mantel(xy_dist, abundr_dist)
+abundr_mantel
+```
+
+```{r}
+# compare the two approaches graphically using stacked boxplots
+boxplot(list(null_cor, abundr_mantel$perm), horizontal = T, boxwex = 0.5,
+        names = c('mine', 'theirs'), xlab='Correlation')
+abline(v=obs_cor_r, col='red')
+```
+These figures and analyses indicate that there is no significant difference between a random spatial distribution and the observed distribution for Sapium.gladulosum. Therefore, this common species is not spatially dependent. 
+```{r}
+sp_ids = c("Cordia.lasiocalyx", "Hirtella.triandra",
+           "Picramnia.latifolia", "Quassia.amara",
+           "Tabernaemontana.arborea", "Trattinnickia.aspera", 
+           "Xylopia.macrantha")
+sp_ids
+```
+```{r}
+sp_a <- BCI$Drypetes.standleyi
+sp_b <- BCI$Cordia.lasiocalyx
+sp_c <- BCI$Hirtella.triandra
+sp_d <- BCI$Picramnia.latifolia
+sp_d <- BCI$Quassia.amara
+sp_e <- BCI$Tabernaemontana.arborea
+sp_f <- BCI$Trattinnickia.aspera
+sp_g <- BCI$Xylopia.macrantha
+
+sp_ids <- cbind(sp_a,sp_b,sp_c,sp_d,sp_e,sp_f, sp_g)
+sp_ids <- data.frame(sp_ids)
+  
+```
+
+
+
+
+```{r}
+sp <- apply(sp_ids, 1, sum)
+sp
+```
+
+```{r}
+sp_dist <- dist(sp)
+xy_dist <- dist(sp_ids)
+
+max_dist = max(xy_dist) / 2
+
+# plot result
+plot(xy_dist, sp_dist)
+abline(lm(sp_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, sp_dist), lwd=3, col='pink')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+
+```{r}
+sp_mantel = mantel(xy_dist, sp_dist)
+sp_mantel
+```
+
+```{r}
+## compute bray curtis distance for the community matrix
+comm_dist = vegdist(sp_ids)
+plot(xy_dist, comm_dist)
+abline(lm(comm_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, comm_dist), lwd=3, col='pink')
+lines(lowess(xy_dist, comm_dist, f=0.1), lwd=3, col='blue')
+
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+Residuals show spatial dependence.
+
+```{r}
+sp_corlog = mantel.correlog(sp_dist, xy_dist)
+comm_corlog = mantel.correlog(comm_dist, xy_dist)
+sp_corlog
+```
+
+```{r}
+comm_corlog
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(sp_corlog)
+mtext(side=3, 'Species Abundance')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+plot(comm_corlog)
+mtext(side=3, 'Community Composition')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+
+```{r}
+sp_dat = data.frame(sp_ids, BCI_xy)
+head(sp_dat)
+
+sp_lm = gls(sp_a ~ sp_b, data = list(sp_dat))
+sp_lm
+summary(sp_lm)
+plot(Variogram(sp_lm, form= ~ x + y)
+``` 
+
+```{r}
+res = residuals(sp_lm)
+plot(dist(sp_dat[, c('x', 'y')]), dist(res))
+lines(lowess(dist(sp_dat[, c('x', 'y')]), dist(res)), col='red', lwd=2)
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+
+```{r}
+sp1_lm = gls(sp_a ~ sp_b + sp_c + sp_d + sp_e + sp_f + sp_g, data = list(sp_dat))
+sp1_lm
+summary(sp1_lm)
+plot(Variogram(sp1_lm, form= ~ x + y)
+```
+
+```{r}
+res = residuals(sp1_lm)
+plot(dist(sp_dat[, c('x', 'y')]), dist(res))
+lines(lowess(dist(sp_dat[, c('x', 'y')]), dist(res)), col='red', lwd=2)
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+
+```{r}
+sp_exp = update(sp1_lm, corr=corExp())
+# examine fit of error model to the raw model residuals
+# note this function defaults to displaying pearson standardized residuals
+# resType='p' or resType='pearson'
+plot(Variogram(sp_exp, maxDist = max_dist))
+
+```
+
+
+```{r}
+plot(Variogram(sp_exp, resType='normalized', maxDist = max_dist))
+```
+
+```{r}
+sp_exp_nug = update(sp_exp, corr=corExp(, nugget=T))
+plot(Variogram(sp_exp_nug, maxDist = max_dist))
+```
+
+```{r}
+plot(Variogram(sp_exp_nug, resType='n', maxDist = max_dist))
+```
+
+```{r}
+sp_rat_nug = update(sp_lm, corr=corRatio(, nugget=T))
+# examine fit of error model to model residuals
+plot(Variogram(sp_rat_nug, maxDist = max_dist))
+```
+
+```{r}
+plot(Variogram(sp_rat_nug, resType='n', maxDist = max_dist))
+```
+
+```{r}
+anova(sp_lm, sp_exp, sp_exp_nug, sp_rat_nug, test=F)
+```
+Including the spatial error term made the models better. According to the anova, the best model was the spatial experimental model. The model including the error is better because the model helps to explain the spatial portion of the error.
+
+
+
