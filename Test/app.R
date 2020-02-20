@@ -28,7 +28,8 @@ ui <- fluidPage(
       # Show a plot of the generated distribution
       mainPanel(
          plotOutput("distPlot"),
-         plotOutput('kernalplot')
+         plotOutput('kernalplot'),
+         tableOutput('timetable')
      )
    )
 )
@@ -50,6 +51,9 @@ server <- function(input, output) {
      plot(density(x))
    })  
    
+   output$timetable <- renderTable({
+     table(faithful [, 2])
+   })
    
    }
 
