@@ -1,0 +1,489 @@
+---
+title: "Univariate Models Lesson"
+author: "Anna Radchenko"
+date: "January 23, 2020"
+output: html_document
+---
+```{r}
+#install.packages("ggplot2")       # for ggplot
+                                                         #install.packages("gridExtra")     # for grid.arrange to arrange ggplots
+                                                         #install.packages("scatterplot3d") # for scatterplot3d to make 3d graphic
+                                                         #install.packages("MASS")          # for stepAIC to automate model selection 
+                                                         
+                                                         library(ggplot2)
+                                                         library(gridExtra)
+                                                         library(scatterplot3d)
+                                                         library(MASS)
+```
+
+```{r}
+weeds <- read.csv("~/R/R_basics/milkweeds.csv")
+weeds
+```
+
+```{r}
+boxplot(fruit_mass_mg ~ trt, data = weeds, xlab='Treatment', 
+                                                                 ylab = 'Fruit mass (mg)')
+```
+```{r}
+quantile(weeds$fruit_mass_mg[weeds$trt == 'fertilized'])
+```
+
+```{r ggboxplot}
+ggplot(data = weeds) + 
+geom_boxplot(mapping = aes(x = trt, y = fruit_mass_mg)) +  
+labs(x = 'Treatment', y = 'Fruit mass (mg)') 
+```
+
+
+```{r}
+plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, xlab = 'Plant height (cm)',
+                                                         ylab = 'Fruit mass (mg)')
+```
+
+```{r}
+ plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, type = 'n', 
+      xlab = 'Plant height (cm)', ylab = 'Fruit mass (mg)')
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "fertilized",
+      pch = 1, col = 'red')
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "unfertilized",
+      pch = 2, col = 'blue')
+legend('topleft', c('Fertilized', 'Unfertilized'), col = c('red', 'blue'), 
+      pch = c(1, 2), bty = 'n')
+```
+
+```{r}
+plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, type = 'n', 
+    xlab = 'Plant height (cm)', ylab = 'Fruit mass (mg)')
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "fertilized",
+    pch = 1, col = 'red')
+                                                         lines(lowess(weeds$plant_ht_cm[weeds$trt == 'fertilized']                                weeds$fruit_mass_mg[weeds$trt == 'fertilized']),lty = 1, col = 'red')
+                                                        
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "unfertilized",
+      pch = 2, col = 'blue')
+                                                         lines(lowess(weeds$plant_ht_cm[weeds$trt == 'unfertilized'],                             weeds$fruit_mass_mg[weeds$trt == 'unfertilized']),lty = 2, col = 'blue')
+#There are many options for smoothing functions to choose from in R but for simplicity we'll use the function `lowess`which is a locally-weighted polynomial regression. FItting a polynomial function as it moves through space
+                                                         
+legend('topleft', c('Fertilized', 'Unfertilized'), col = c('red', 'blue'), 
+      pch = c(1, 2), lty = c(1, 2), bty = 'n')
+```
+Looks like a polynomial h~ w + w^2 + W^3
+```{r}
+ggplot(data = weeds, mapping = aes(x = plant_ht_cm, y = fruit_mass_mg)) + 
+  geom_point(mapping = aes(color = trt)) +
+  geom_smooth(mapping = aes(linetype = trt, color = trt), method = 'loess') +
+  scale_color_manual(values = c("red", "blue")) +
+  labs(x = 'Plant height (cm)', y= 'Fruit mass (mg)')+
+  theme_classic()
+```
+#This model essentially just uses the mean of y as a predictor of y. This may seem silly but this is essentially what you compare all more complex models against.
+
+
+Linear: Ordinary Least Squares Regression
+Can sometimes make things linear by doing the log transformation of the data 
+S =cA^2 to logS = log c + z log A
+y = b + mx
+
+Epsilon = E = the points around the regression linefor the residuals, should have a variance of sigma squared
+
+Beta = partial slopes, assigning a partial effect to each variable to explain the overal variation. Allows us to statistically control what we couldn't control by design
+```{r}
+null_mod = lm(fruit_mass_mg ~ 1, data = weeds)
+null_mod
+```
+```{r}
+mean(weeds$fruit_mass_mg)
+```
+
+```{r}
+plot(fruit_mass_mg ~ 1, data = weeds)
+abline(null_mod, lwd = 2)
+abline(h = mean(weeds$fruit_mass_mg), col = 'red', lty = 2, lwd = 2)
+```
+
+
+Assuming an effect, 
+```{r}
+trt_mod = lm(fruit_mass_mg ~ trt, data = weeds)
+# alternatively we can just update null_mod
+trt_mod = update(null_mod, . ~ . + trt) #dot to keep the same parts in there and just add on that one variable, can also use it to drop a variable with a -
+ht_mod = update(null_mod, . ~ . + plant_ht_cm)
+trt_mod
+```
+intercept for trtunfertilized = 20.1 -3.39
+The way the model is actually build by the computer is to take the model and unpacks it to a dummy matrix, of 0s and 1s, so all columns sum to 1, so only need one parameter beyon the intercept to understand it
+
+```{r}
+contrasts(weeds$trt)
+```
+
+
+```{r}
+ht_mod
+```
+
+```{r}
+levels (weeds$trt)
+contrasts (weeds$trt)
+```
+#In this case we have a factor trt that only has two levels so it only #requires one binary variable because if a sample is not fertilized then it must be unfertilized. That may seem a little strange but just remember that if you have a factor with k levels then you need k - 1 binary variables to specify that factor as a set of orthogonal contrasts. This explains why the treatment variable only requires a single regression coefficient.
+
+Sometimes we have factors that are ranked such as low, medium, high. In this case the variable is called ordinal as opposed to our nomial treatment variable. The contrasts of ordinal variables are not as simple to specify and typically a Helmert polynomial contrasts are used.
+
+Let’s examine these models graphically.
+
+
+```{r}
+par(mfrow=c(1,2))
+plot(fruit_mass_mg ~ trt, data = weeds, xlab = 'Treatment',ylab = 'Fruit mass (mg)')
+abline(trt_mod)
+
+plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, 
+     xlab = 'Plant height (cm)', ylab = 'Fruit mass (mg)')
+abline(ht_mod) #don't usually put these lines on there, often time treated as if ANOVA is different than regression, it is the same thing, just a diffrent way to present the results, line still goes through the middle of the boxplot data sets
+```
+```{r}
+par(mfrow=c(1,2))
+plot(0:1, 0:1, type='n', ylim = range(weeds$fruit_mass_mg), axes = F,
+     xlim = c(-0.25, 1.25),
+     xlab = 'Treatment', ylab = 'Fruit mass (mg)', frame.plot = T)
+points(rep(0, 20), weeds$fruit_mass_mg[weeds$trt == 'fertilized'])
+points(rep(1, 20), weeds$fruit_mass_mg[weeds$trt == 'unfertilized'])
+axis(side = 1, at = 0:1, labels = c('fertilized', 'unfertilized'))
+axis(side = 2)
+abline(trt_mod)
+
+plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, 
+     xlab = 'Plant height (cm)', ylab = 'Fruit mass (mg)')
+abline(ht_mod)
+```
+
+```{r}
+p1 <- ggplot(data = weeds,
+             mapping = aes(x = trt, y = fruit_mass_mg, group = 1)) + 
+      geom_point() + 
+      geom_smooth(method = 'lm') +
+      labs(x = 'Treatment', y = 'Fruit mass (mg)')
+
+p2 <- ggplot(data = weeds, 
+             mapping = aes(x = plant_ht_cm, y = fruit_mass_mg)) + 
+      geom_point() + 
+      geom_smooth(method = 'lm') + 
+      labs(x = 'Plant height (cm)', y = 'Fruit mass (mg)')
+
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r}
+main_mod = lm(fruit_mass_mg ~ trt + plant_ht_cm, data = weeds)
+main_mod
+```
+
+```{r}
+xrange = range(weeds$plant_ht_cm)
+
+plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, type = 'n', 
+     xlab = 'Plant height (cm)', ylab = 'Fruit mass (mg)')
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "fertilized",
+       pch = 1, col = 'red')
+# add the fitted regression line using two points at either end of the range of x 
+lines(xrange, 
+      predict(main_mod, 
+              newdata = data.frame(plant_ht_cm = xrange, trt = "fertilized")),
+      col = 'red', lty = 1)
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "unfertilized",
+       pch = 2, col = 'blue')
+lines(xrange, 
+      predict(main_mod, 
+              newdata = data.frame(plant_ht_cm = xrange, trt = "unfertilized")),
+      col = 'blue', lty = 2)
+legend('topleft', c('Fertilized', 'Unfertilized'), col = c('red', 'blue'), 
+       pch = c(1, 2), lty = c(1, 2), bty = 'n')
+```
+#Above in the R code we used a new function predict(). This function is useful for taking a fitted model and using it to predict values. In this case we use this feature to predict where two points fall along the x-axis so that we can connect them with lines and thus form the fitted regression lines. One of the more difficult arguments to predict() to understand is the newdata argument. This is essentially a data.frame that must have the variables in the model included as column names. So in this case must have the variables plant_ht_cm and trt in newdata.
+
+```{r}
+s3d <- scatterplot3d(weeds[ , c('trt', 'plant_ht_cm', 'fruit_mass_mg')], 
+                     type = 'h', color = 'blue', angle = 65, pch = 16, 
+                     lab = c(3, 5), xlim = c(0, 3),
+                     x.ticklabs = c('', 'fertilized', 'unfertilized', ''), 
+                     box = F) 
+# Add regression plane
+s3d$plane3d(main_mod) #multiple regression is fitting this plane to the plot
+```
+
+```{r}
+int_mod = lm(fruit_mass_mg ~ trt + plant_ht_cm + trt:plant_ht_cm,
+              data = weeds)
+# alternatively we can use * as short hand
+int_mod = lm(fruit_mass_mg ~ trt * plant_ht_cm, data = weeds)
+int_mod
+```
+Close to 0, meaning that there probably isn't an interaction effect
+
+```{r}
+plot(fruit_mass_mg ~ plant_ht_cm, data = weeds, type = 'n', 
+     xlab = 'Plant height (cm)', ylab = 'Fruit mass (mg)')
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "fertilized",
+       pch = 1, col = 'red')
+xrange = range(weeds$plant_ht_cm[weeds$trt == "fertilized"])
+lines(xrange, 
+      predict(int_mod, 
+              newdata = data.frame(plant_ht_cm = xrange, trt = "fertilized")),
+      col = 'red', lty = 1)
+points(fruit_mass_mg ~ plant_ht_cm, data = weeds, subset = trt == "unfertilized",
+       pch = 2, col = 'blue')
+xrange = range(weeds$plant_ht_cm[weeds$trt == "unfertilized"])
+lines(xrange, 
+      predict(int_mod, 
+              newdata = data.frame(plant_ht_cm = xrange, trt = "unfertilized")),
+      col = 'blue', lty = 2)
+legend('topleft', c('Fertilized', 'Unfertilized'), col = c('red', 'blue'), 
+       pch = c(1, 2), lty = c(1, 2), bty = 'n')
+```
+
+```{r}
+ggplot(weeds, mapping = aes(x = plant_ht_cm, y = fruit_mass_mg)) +
+  geom_point(aes(color = trt)) +
+  geom_smooth(aes(color = trt, linetype = trt), method = 'lm', se = F) + 
+  labs(x = 'Plant height (cm)' , y = "Fruit mass (cm)")
+```
+
+```{r}
+summary(trt_mod)
+```
+```{r}
+anova (trt_mod)
+```
+```{r}
+summary (trt_mod)
+```
+#The multiple R-squared and adjusted R-squared provide estimates of variance explained. The later statistic adjusts for the number of variables included in the model. The F-statistic is a ratio of the mean sum of squares for the model to the sum of squares of the residuals (i.e., the ratio of explained variance to unexplained variance). The p-value associated with the F-statistic provides a means of examining the statistics significance of the entire model.
+```{r}
+# F is explained SS / (unexplained SS / df)
+114.95 / (234.68 / 38)
+```
+
+```{r}
+summary(lm(formula = fruit_mass_mg ~ plant_ht_cm, data = weeds))
+```
+```{r}
+summary(main_mod)
+```
+```{r}
+summary(int_mod)
+```
+
+```{r}
+anova(main_mod, int_mod)
+```
+
+#where L^ is the likelihood of the model and k is the number of parameters in the model. The AIC index ranks models both on their degree of fit but also on their complexity. A small value of AIC indicates a better model and thus models with more complexity (i.e., more parameters) and thus larger k value, but equal likelihood are considered worse models (higher AIC).
+
+```{r}
+AIC(null_mod)
+AIC(trt_mod)
+AIC(ht_mod)
+AIC(main_mod)
+AIC(int_mod)
+```
+
+```{r}
+# run a stepwise regerssion analysis on the full model.
+stepAIC(int_mod)
+```
+
+```{r}
+par(mfrow = c(2,2))
+plot(int_mod)
+```
+
+Simulation
+```{r}
+#generate data for example
+set.seed(10) # this is done so that the same results are generated each time
+x1 = runif(900)
+x2 = rbinom(900, 10, .5)
+x3 = rgamma(900, .1, .1)
+
+#organize predictors in data frame
+sim_data = data.frame(x1, x2, x3)
+#create noise b/c there is always error in real life
+epsilon = rnorm(900, 0, 3)
+#generate response: additive model plus noise, intercept=0
+sim_data$y = 2*x1 + x2 + 3*x3 + epsilon
+```
+
+```{r}
+#First we will demonstrate the simplest possible model 
+#the intercept only model
+mod = lm(sim_data$y ~ 1)
+mod 
+summary(mod)
+```
+
+```{r}
+#simple linear regression with x1 as predictor
+mod1 = lm(y ~ x1, data=sim_data)
+#plot regression line and mean line
+plot(y ~ x1, data=sim_data)
+abline(h=mean(sim_data$y), col='pink', lwd=3)
+abline(mod1, lty=2)
+```
+
+```{r}
+#simple linear regression with x3 as a predictor
+mod3 = lm(y ~ x3, data=sim_data)
+#graph regression line and mean line
+plot(y ~ x3, data=sim_data)
+abline(mod3)
+abline(h=mean(sim_data$y), col='pink', lwd=2)
+legend('topleft', c('OLS fit', 'mean'), col=c('black', 'pink'), lty=1, lwd=c(1,2))
+```
+```{r}
+summary(mod1)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(mod1)
+```
+
+```{r}
+par(mfrow=c(1,1))
+```
+
+```{r}
+sim_data_sub = sim_data[-c(263, 319, 405), ]
+#verify that one observation was removed
+dim(sim_data)
+```
+
+```{r}
+dim(sim_data_sub)
+```
+
+```{r}
+#refit model to reduced data
+mod3_sub = lm(y ~ x3, data=sim_data_sub)
+summary(mod3)
+```
+
+```{r}
+summary(mod3_sub)
+```
+
+```{r}
+plot(y ~ x3, data=sim_data)
+points(y ~ x3, data=sim_data_sub, col='dodgerblue', pch=19)
+abline(mod3)
+abline(mod3_sub, col='dodgerblue', lwd=2)
+legend('topleft', c('fit with all data', 'fit w/o outliers'), 
+       col=c('black', 'dodgerblue'), pch=c(1, 19), lty=1, 
+       lwd=c(1,2), bty='n')
+```
+
+```{r}
+mod_main = lm(y ~ x1 + x2 + x3, data=sim_data)
+summary(mod_main)
+```
+```{r}
+coefficients(mod_main)
+```
+
+```{r}
+## We will use this function to plot the data and correlations 
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor=3, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) 
+        cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor)
+}
+```
+
+Before standardizing variables it is worthwhile to highlight that the relationship between correlation and regression statistics. Specifically, the t-statistic from a simple correlation coefficient is exactly what is reported for the β1 coefficient in a regression model.
+
+```{r}
+cor.test(sim_data$y, sim_data$x1)$statistic
+```
+
+```{r}
+summary(lm(y ~ x1, data=sim_data))$coef
+```
+
+```{r}
+sim_data_std = data.frame(scale(sim_data))
+
+mod = lm(y  ~ x1 + x2 + x3, data=sim_data)
+mod_std = lm(y  ~ x1 + x2 + x3, data=sim_data_std)
+round(summary(mod)$coef, 3)
+```
+
+```{r}
+round(summary(mod_std)$coef, 3)
+```
+
+```{r}
+cor(sim_data$y, sim_data$x1)
+```
+```{r}
+cor(sim_data$y, sim_data$x2)
+```
+
+```{r}
+cor(sim_data$y, sim_data$x3)
+```
+Notice that above the t-statistics and consequently the p-values between mod and mod_std don’t change (with the exception of the intercept term which is always 0 in a regression of standardized variables). This is because the t-statistic is a pivotal statistic meaning that its value doesn’t depend on the scale of the difference.
+
+Additionally notice that the individual correlation coefficients are very similar to the β estimates in mod_std. Why are these not exactly the same? Here’s a hint - what would happen if their was strong multicollinarity between the explanatory variables?
+
+Let’s plot the variables against one another and also display their individual Pearson correlation coefficients to get a visual perspective on the problem
+
+```{r}
+pairs(sim_data, lower.panel = panel.smooth, upper.panel = panel.cor)
+```
+```{r}
+lm(y ~ x1 + x2 + x3 + x1*x2 + x1*x3 + x2*x3 + x1*x2*x3, data=sim_data)
+```
+```{r}
+# or you can simply update the main effects model
+mod_full = update(mod_main, ~ . + x1*x2*x3)
+summary(mod_full)
+```
+```{r}
+# we can carry out a nested model comparison
+anova(mod_main, mod_full)
+```
+```{r}
+# examine the AIC scores of the two models, smaller number is better
+AIC(mod_full)
+```
+```{r}
+AIC(mod_main)
+```
+```{r}
+stepAIC(mod_full)
+```
+
+```{r}
+health <- rnorm(100,10,2)
+hist(health)
+predictors <- replicate(100, rnorm(1000, 0, 1))
+head(predictors)
+```
+```{r}
+mod <-lm (health ~ predictors)
+summary(mod)
+```
+
+
+Interpolation vs. Extrapolation
+Interpolation allows us to predict growth anywhere on this graph, based on your data, extrapolation is anywhere outside the graph. Interpolation works really well, but extrapolating can easily fail. 
+
+Cross validation
+Looking at your data and fitting it to 1 half of your data and then using it to predict the other half and then checking it against that.
