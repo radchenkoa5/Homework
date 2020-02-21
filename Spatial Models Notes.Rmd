@@ -1,0 +1,241 @@
+---
+title: "Spatial Models Lesson"
+author: "Anna Radchenko"
+date: "February 11, 2020"
+output: html_document
+---
+Tobler's 1st law of geography: Places that are closer together are more similar than those farther apart. Aka the world is patchy. So a residuals vs. distance in space model would have a positive slope linear line associated with them. It is autocorrelated with itself. 
+
+```{r}
+library (vegan)
+```
+
+```{r}
+library(nlme)
+# Oribatid mite data. 70 soil cores collected by Daniel Borcard in 1989.
+# See Borcard et al. (1992, 1994) for details.
+data(mite)
+data(mite.env)
+data(mite.xy)
+?mite
+```
+
+```{r}
+plot(mite.xy)
+```
+
+```{r}
+sr = apply(mite, 1, function(x) sum(x > 0))
+hist(sr)
+```
+
+```{r}
+plot(mite.xy, cex = sr/max(sr))
+```
+
+```{r}
+col_brks = hist(sr, plot=F)$breaks
+col_indices = as.numeric(cut(sr, col_brks))
+cols = rev(terrain.colors(length(col_brks)))
+plot(mite.xy, cex=2, pch=19, col=cols[col_indices])
+```
+
+```{r}
+# calculate Euclidean distance between richness and spatial coordinates
+sr_dist = dist(sr)
+xy_dist = dist(mite.xy)
+sr_dist
+```
+Shows how many species each sample differs, the absolute value of their differences. 
+
+For interpretation purposes a rule of thumb is not to interpret distances great than 1/2 the maximum distance in the dataset. This is to avoid examining spatial patterns that are underlaid by only a few samples. At small to intermidate distances there are typically many more pairs of samples where as at the extreme ends of a sampling grid there are only two sets of samples (i.e., those that lie along the two diagonals corners from one another)
+
+```{r}
+max_dist = max(xy_dist) / 2
+
+# plot result
+plot(xy_dist, sr_dist)
+abline(lm(sr_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, sr_dist), lwd=3, col='pink')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+Number of samples = N(N-1)/2
+All possible pairwise combinations of distances. Want to be unconstrained and see if there is a pattern. Fit a regression line and lowess smoother. 
+
+Regression line and smoother are similar to each other showing there probably is a linear relationship.
+
+Find a correlation coefficient to see how strong the relationship is.
+```{r}
+# compute correlation
+obs_cor = cor(xy_dist, sr_dist)
+obs_cor
+```
+
+Don't have a parametric distribution, so need to generate what the expectation would be under the null hypothesis. 
+
+Permutations test are shuffling the rows multiple times, to see if there are any structural changes from this. The identity of the species or whatever the row is becomes nullified to see if the model still fits.
+
+```{r}
+# carry out a permutation test for significance:
+nperm = 1000
+null_cor = obs_cor
+for (i in 2:nperm) {
+    # shuffle the rows of the spatial coordinates
+    tmp_xy = mite.xy[sample(nrow(mite.xy)), ]
+    # correlation between the shuffled spatial coordinates and sr_dist
+    null_cor[i] = cor(dist(tmp_xy), sr_dist)
+}
+# compute the p-value
+sum(null_cor >= obs_cor) / nperm 
+```
+
+```{r}
+hist(null_cor)
+#number of times the null cor was randomly larger than the observed cor or effect.
+abline(v=obs_cor, col ='red')
+```
+```{r}
+#mantel is a black box way of computing the same thing
+sr_mantel = mantel(xy_dist, sr_dist)
+sr_mantel
+
+```
+```{r}
+# compare the two approaches graphically using stacked boxplots
+boxplot(list(null_cor, sr_mantel$perm), horizontal = T, boxwex = 0.5,
+        names = c('mine', 'theirs'), xlab='Correlation')
+abline(v=obs_cor, col='red')
+```
+
+```{r}
+## compute bray curtis distance for the community matrix
+comm_dist = vegdist(mite)
+plot(xy_dist, comm_dist)
+abline(lm(comm_dist ~ xy_dist), lwd=3, col='red')
+lines(lowess(xy_dist, comm_dist), lwd=3, col='pink')
+lines(lowess(xy_dist, comm_dist, f=0.1), lwd=3, col='blue')
+
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+
+One smoother is a little more flexible than the other. f	
+the smoother span. This gives the proportion of points in the plot which influence the smooth at each value. Larger values give more smoothness.
+
+```{r}
+comm_mantel = mantel(xy_dist, comm_dist)
+comm_mantel
+```
+
+```{r}
+sr_corlog = mantel.correlog(sr_dist, xy_dist)
+comm_corlog = mantel.correlog(comm_dist, xy_dist)
+sr_corlog
+```
+```{r}
+comm_corlog
+```
+```{r}
+par(mfrow=c(1,2))
+plot(sr_corlog)
+mtext(side=3, 'Species Richness')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+plot(comm_corlog)
+mtext(side=3, 'Community Composition')
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+Spatial (and temporal) dependence is a potential problem for inferential statistics because of an assumption of independence of error. However, if sufficient data is available it is often possible to model the spatial component of error and thus “correct” for the lack of independence in a model’s error.
+
+Crawley (2014) provides a straightforward description of these methods and a few examples. Pinheiro and Bates (2000) provide a more detailed discussion with more examples and they provide a useful table and figure that is helpful when deciding which error model to chose from:
+
+This is Table 5.2 from Pinheiro and Bates (2000) in which s is the spatial lag and rho is the correlation parameter. This is a subset of the models presented in Cressie (1993).
+
+```{r}
+sr_dat = data.frame(sr, mite.env, mite.xy)
+
+sr_lm = gls(sr ~ SubsDens, data=sr_dat)
+
+plot(Variogram(sr_lm, form= ~ x + y)) #need this form because in this dataframe there is a column called x and one called y, so pay attention to what you are looking at. Both are spatial positions that we are comparing.
+```
+This shows the semivariance of the residuals and the error to see if there is still spatial dependence in the variance. Yes there is. 
+
+```{r}
+res = residuals(sr_lm)
+plot(dist(sr_dat[, c('x', 'y')]), dist(res))
+lines(lowess(dist(sr_dat[, c('x', 'y')]), dist(res)), col='red', lwd=2)
+abline(v = max_dist, col='red', lwd=3, lty=2)
+```
+Both data and residuals showed spatial dependence, so residuals are not independent. Now say there is correlation structure here. What can we do with it?
+
+```{r}
+sr_exp = update(sr_lm, corr=corExp(form=~x + y))
+# examine fit of error model to the raw model residuals
+# note this function defaults to displaying pearson standardized residuals
+# resType='p' or resType='pearson'
+plot(Variogram(sr_exp, maxDist = max_dist))
+```
+
+Lets compare these two models is it capturing the residuals? Is there autocorrelation? Model sucks and residuals still show autocorrelation.
+
+```{r}
+# that doesn't look so good because clearly the model does not fit the error 
+# very well, it appears that there is a nugget (i.e., non-zero y-intercept)
+# Let's examine the normalized residuals in which the residuals are 
+# divided by the estimate of the variance-covariance matrix. If the model
+# fits well these residuals should be normally distributed.
+plot(Variogram(sr_exp, resType='normalized', maxDist = max_dist))
+```
+In reality often have a nugget effect where the y intercept is greater than 0. Find rate of exponential decay. 
+```{r}
+# we see a little bit of a trend in the residuals but not too bad
+# actually which is a bit surprising given the output of the raw residuals
+
+# let's look at the same model but with a nugget
+sr_exp_nug = update(sr_exp, corr=corExp(form=~x + y, nugget=T))
+plot(Variogram(sr_exp_nug, maxDist = max_dist))
+```
+
+```{r}
+plot(Variogram(sr_exp_nug, resType='n', maxDist = max_dist))
+```
+Pretty flat, might be meeting the assumptions of normality better now. Using a lowess smoother. p-value is the most impacted by the assumption that samples are indepenent. Sample size can be decreased due to the lack of independence, which can effect the p-value. Need a more conservative p-value.
+
+```{r}
+# those look like they provide a better fit to the data
+
+# let's examine the rational quadratic error model
+sr_rat_nug = update(sr_lm, corr=corRatio(form=~x + y, nugget=T))
+# examine fit of error model to model residuals
+plot(Variogram(sr_rat_nug, maxDist = max_dist))
+```
+
+
+```{r}
+ #this model seems to fit about as a good as the exponential with the nugget
+
+# let's compare the models
+anova(sr_lm, sr_exp, sr_exp_nug, sr_rat_nug, test=F)
+```
+```{r}
+# so it appears that the exponential and rational models with the nuggets
+# fit equally as well and much better than models without spatial error terms
+# and better than a model with a nugget set to zero.
+
+summary(sr_exp_nug)
+```
+
+More driver variables that we include, than the more we look for spatial correlation, the less we should see it. It might not be necessary, if you capture the fundamental reason for the autocorrelation.
+
+```{r}
+mite_rda = rda(mite, mite.env[ , 1:2])
+
+plot(mite_rda, display=c('sp', 'bp'))
+
+```
+
+
+```{r}
+mite_mso_raw = mso(rda(mite), mite.xy, permutations = 1000)
+mite_mso = mso(mite_rda, mite.xy, permutations = 1000)
+mite_mso
+```
+
