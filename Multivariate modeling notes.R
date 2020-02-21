@@ -1,0 +1,450 @@
+---
+  title: "Multivariate models"
+output: html_document
+---
+  LEts explain the variance in this matrix and reduce it's dimensionality. We want to understand all of these patterns together. Now y itself is a matrix. Terminology and all the ways that the y matrix gets transformed is confusing.
+
+First we'll go with Eucledian distances, normal pythaogrean way.
+
+The goal of this lesson is to introduce multivariate ordination analyses.
+
+## Readings
+* Chapters 5 and 6 of *Numerical Ecology with R*
+  * Chapters 9 and 11 of *Numerical Ecology* 2nd edition
+
+## Online Docs
+* [Ordination analysis by David Zeleny](https://www.davidzeleny.net/anadat-r/doku.php/en:ordination)
+* [The Ordination Webpage by Mike Palmer](http://ordination.okstate.edu/)
+- great for term definitions, layman's explanation of how the methods
+differ, and how ecologists should interpret
+* [Vegan: an introduction to ordination by Jari Oksanen](http://cran.r-project.org/web/packages/vegan/vignettes/intro-vegan.pdf)
+- A brief demonstration of an ordination analysis in the R package vegan
+* [Multivariate Analysis of Ecological Communities in R: vegan tutorial by Jari Oksanen](http://cc.oulu.fi/~jarioksa/opetus/metodi/vegantutor.pdf)
+- A more thorough  of ordination in the R package vegan
+
+##Outline
+* Overview of ordination methods
+* Create a community matrix.
+* Indirect or Unconstrained Ordination
+- Principle Components Analysis (PCA)
+- Correspondence Analysis (CA) 
+- Detrended Correspondence Analysis (DCA)
+- Non-metric Multidimensional Scaling (NMDS)
+* Direct or Constrained Ordination
+- Redundancy Analysis (RDA)
+- Canonical Correspondence Analysis (CCA)
+- Hypothesis Testing
+- Model Comparison
+- Variance partitioning
+
+## Overview of ordination methods
+
+There are generally considered to be two types of ordination. 
+
+1. Indirect or unconstrained ordination in which only a single matrix is analyzed (null model y ~ 1, intercept only model)
+2. Direct or constrained ordination in which one matrix is used to explain the 
+variance of another matrix (y ~ x), including another variable to help explain variation
+
+Correspondence Analysis: Looks at the proportions, weighted species scores kind of thing, looking at the proportional difference.
+
+Non-metric Multidimensional Scaling - for non eucledian, such as a triangle with samples on each axis, want to give the right angle box a value as the acute angles are essentially the same and want a value for where the samples are different. Usually have to post hoc over the ordination variables to make it work as it's not direct.
+
+Today we will demonstrate both types. In general, ordination is frequently used
+when exploring patterns in datasets graphically; however, it can also be used 
+to carry out hypothesis testing. 
+
+The term ordination derives from the idea to ordinate or put things into order.
+With ordination approaches were are attempting to take a high-dimensional 
+data matrix and explain its patterns with a small number of axes. 
+
+Despite their sometimes terrifying names ordination has a close kinship with 
+multiple regression. One key difference is that the response variable is 
+multivariate rather than univariate; however, with many approaches the underlying
+algebra is very similar between regression and ordination.
+
+Overview of Ordination methods (adapted from <http://ordination.okstate.edu/terminol.htm>)
+
+```{r, echo = FALSE}
+library(knitr)
+# setup the R enviornment for kniting markdown doc properly
+opts_knit$set(root.dir='../')
+ord = read.csv('./ordination_table.csv')
+names(ord) = c("Acronym",	"Name", "Type of analysis", "Algorithm",	"R function")
+kable(ord)
+```
+
+This [presentation](./community_structure_slides_with_notes.pdf) by 
+[Abel Valdivia](https://twitter.com/AbelValdivia) provides a review of the types of
+ordination and provides examples of their graphical output. 
+
+Additionally this [key](http://ordination.okstate.edu/key.htm) created by Mike
+Palmer provides a decision tree that can help to guide your choice of methods.
+
+## Create a community matrix
+
+The first very common challenge when working with multivariate analyses is to  construct the multivariate matrix we wish to analyze.
+Essentially a community matrix is a cross-tab structure in which you have each descriptor element (e.g., species identities) as column ids and each sample element (e.g., site identities) as row ids. 
+A cross-tab structure is a very inefficient way to store your raw data and in many cases we must aggregate the raw data which can be accomplished using a for loop or other simple functions. 
+Using the Great Smokey Mountains tree dataset that was using in HW 3, I will demonstrate how to do this with a computationally inefficient but easy to understand for loop. 
+As a reminder the metadata for the tree data is located [here](../data/tree_metadata.txt).
+
+
+```{r}
+# load relevant packages and code for today's lesson
+library(vegan)
+library(dummies)
+source('./scripts/utility_functions.R')
+
+# load data
+tree = read.csv('./data/treedata_subset.csv')
+
+# create a community site x species matrix by summing species cover values
+# we can do this with a for loop but it take a while to run
+uni_sp = unique(tree$spcode)
+uni_site = unique(tree$plotID)
+```
+
+Getting it into wide format to get all the samples with the species along it. A way of doing this out. 
+```{r for loop, eval=FALSE}
+comm = matrix(0, ncol=length(uni_sp), nrow=length(uni_site))
+colnames(comm) = uni_sp
+rownames(comm) = uni_site
+for(i in seq_along(uni_sp)) {
+  for(j in seq_along(uni_site)) {
+    comm[j , i] = mean(tree$cover[tree$spcode == uni_sp[i] &
+                                    tree$plotID == uni_site[j]])
+  }
+}
+comm[1:5, 1:5]
+```
+
+Alternatively we could use the function `tapply` which is much more efficient.
+
+```{r tapply}
+# alternatively we can use a tapply function 
+comm = tapply(tree$cover,
+              INDEX = list(tree$plotID, tree$spcode),
+              mean)
+# examine the community matrix
+comm[1:5, 1:5]
+# replace the NAs with zeros
+comm = ifelse(is.na(comm), 0, comm)
+comm[1:5, 1:5]
+```
+
+Now that we've created our matrix it is usually a good idea to make sure everything looks ok - the row and column sums (i.e., marginal sums) provide one reasonable metric to see overall how the data is structured in a very coarse way. 
+
+```{r maginal sums}
+# visually explore the cover variable between species and sites
+uni_sp = unique(tree$spcode)
+sp_sum = apply(comm, 2, sum)
+site_sum = apply(comm, 1, sum)
+par(mfrow=c(2,2))
+hist(sp_sum)
+col = colorRamp(c('red', 'orange', 'blue'))
+sp_cols = col(length(uni_sp))
+plot(sp_sum[order(sp_sum, decreasing=T)], type='o', col='red', lwd=2,
+xlab='Sp Rank', ylab='Sum Cover')
+hist(site_sum)
+plot(site_sum[order(site_sum, decreasing=T)], type='o', col='red', lwd=2,
+xlab='Site Rank', ylab='Sum Cover')
+par(mfrow=c(1,1))
+```
+Frequency histogram: Very skewed, most species are very rare. There are a lot of 0s in the matrix, or a sparse matrix. Very ineffective to take a single model approach for each species, how can you build a model for the species when you see it once?
+Site Histogram: Pretty normally distributed, there are species at each site essentially, looking at overall data structuring. Sites are similar.
+Above we can see that most species have small total covers (i.e., most species are rare) which is a fairly universal ecological law so this seems correct. 
+Also we can see that most sites have a total cover of approximately 40 and that this distribution isn't as highly skewed as the species marginal totals. 
+
+These plots are not terribly helpful at understanding the variability in the community matrix so let's get our enviornmental variables ready to use and start to conduct some actual analyses. 
+
+## Create an explanatory matrix
+
+Need to compress the long format
+
+In the tree dataset each site has one set of enviornmental measurements. These 
+are replicated across the rows of the `tree` data object
+
+```{r, echo=FALSE}
+with(tree, head(tree[plotID == "ATBN-01-0403", ]))
+```
+
+So we just need to pull out the enviornmental data for a single one of those rows. 
+In the end we need the explanatory matrix to have the same number of rows in the 
+same order as the community matrix. We could write a for loop to do this but 
+we'll take the easier approach of using the function `aggregate`.
+
+```{r create env matrix}
+cols_to_keep = c('elev', 'tci', 'streamdist', 'disturb', 'beers')
+env = aggregate(tree[ , cols_to_keep], by = list(tree$plotID), function(x) x[1]) #defining x right there, everything that is getting broken down in aggregate will
+#be x, then we're telling it to take the first thing in x
+# aggregate does have a side effect of adding a column to the output which, helping to compress the long format
+# is the unique plotID in this case. We just need to move that so it is a 
+# row name instead. 
+row.names(env) = env[ , 1]
+env = env[ , -1]
+head(env)
+
+# before we can use this explanatory matrix we need to check 
+# that its rows are in the same order as our response matrix
+
+all.equal(rownames(comm), rownames(env))
+
+# now that we've completed that check we can rename the rows to something 
+# more manageable, make sure they were processed in the right order, row names are the site id values
+
+rownames(comm) = 1:nrow(comm)
+rownames(env) = 1:nrow(env)
+
+```
+#changing row names to numbers, to make it look better in figures
+
+
+## Indirect or Unconstrained Ordination
+### Principle Components Analysis (PCA)
+
+Principle Components Analysis (PCA) is a useful tool for either
+
+1. examining correlations between the columns of a matrix
+2. potentially reducing the set of explanatory variables included in model
+dimension is an axis of potential variation. So as many species in the samples that we have is the number of dimensions we have.
+Regression line is the first principle axis of variation. THat explains the most variation between the species
+
+Sometimes PCA is also known as Reciprocal Averaging (RA). 
+
+Simplified description of PCA algorithm (from [Zelený 2018](https://www.davidzeleny.net/anadat-r/doku.php/en:pca)):
+  
+  a. Use the matrix of samples x species (or, generally, samples x descriptors), and display each sample into the multidimensional space where each dimension is defined by an abundance of one species (or descriptor). In this way, the samples will produce a cloud located in the multidimensional space.
+b. Calculate the centroid of the cloud.
+c. Move the centres of axes to this centroid.
+d. Rotate the axes in such a way that the first axis goes through the cloud in the direction of the highest variance, the second is perpendicular to the first and goes in the direction of the second highest variance, and so on. The position of samples on resulting rotated axes are sample scores on ordination axes.
+
+<img src="https://www.davidzeleny.net/anadat-r/lib/exe/fetch.php/obrazky:pca_algorithm_2d_legendre-legendre.jpg?cache="/>
+  
+  Figure 1: PCA ordination of five samples and two species. (Fig. 9.2 from Legendre & Legendre 1998.) 
+Must be orthogenal aka independent to, residuals are always orthogenal to the PCA line. 
+A 2 dimensional analysis is the most useful to understand visually and if we have to go to a 3rd dimension on a figure, then PCA hasn't done much for us
+<img src="https://www.davidzeleny.net/anadat-r/lib/exe/fetch.php/obrazky:pca_algorithm_3d.jpg?cache="/>
+  
+  Figure 2: 3D schema of PCA ordination algorithm
+
+Check out the nice interactive visualization at [Explained Visually](http://setosa.io/ev/principal-component-analysis/)
+Helps you to know what axis to use to explain the most variation in your follow up models, helps to bring down the dimensionality
+
+We'll start by using PCA to simply examine the correlations in tree species 
+covers that are contained in the community matrix. 
+
+```{r comm pca}
+tree_pca = rda(comm, scale=TRUE) #scale is subtracting each column by it's mean and standard deviation, making it a standardized variable
+tree_pca #eigen values become person corelation values. inertia is variation, here 52, which is the number of species we have. 
+#unconstrained ordiantion, so all variation is unconstrained, didn't bring in any variables to explain, this is the null model.
+#Eigen values, first model only expains 5% of variation
+```
+
+Like the object returned by the function `lm`, the output of `rda` is just a named list. 
+We can get a sense of the structure of this named list using the function `str`
+
+```{r using str}
+str(tree_pca)
+```
+
+This is useful because for example if we wanted to pull out the eigenvalues of the 
+analysis we would see that they are stored under `$CA$eig`. 
+We can access each of the objects stored in a named list as we would reference columns in a `data.frame` using the `$`. 
+
+```{r eigenvalues}
+tree_pca$
+tree_pca$tot.chi
+tree_pca$CA$eig
+# the eigenvalues sum up to equal the total interia (i.e., total variance in this case)
+sum(tree_pca$CA$eig)
+# the ratio of the eigenvalue to the total variance is the amount of 
+# variance explained by each PCA axis
+round(tree_pca$CA$eig / tree_pca$tot.chi, 2)
+```
+
+We can see from above that the PCA axis 1 captures approximately 10% of the total
+variance in the community matrix. 
+Let's graph the data to better get a sense of the correlation structure.
+
+```{r plot pca}
+plot(tree_pca)
+biplot(tree_pca)
+cleanplot.pca(tree_pca)
+# p120-121 of Numerical Ecology in R:
+# Scaling 1 = distance biplot: the eigenvectors are scaled to unit length. (1)
+# Distances among objects in the biplot are approximations of their
+# Euclidean distances in multidimensional space. (2) The angles among
+# descriptor vectors are meaningless.
+# Scaling 2 = correlation biplot: each eigenvector is scaled to the square root of
+# its eigenvalue. (1) Distances among objects in the biplot are not approximations
+# of their Euclidean distances in multidimensional space. (2) The angles
+# between descriptors in the biplot reflect their correlations.
+ordiplot(tree_pca, display = 'sp')
+orditorp(tree_pca, display = 'sp')
+```
+# can see that species that like dry areas are going in the same direction, a little harder to see, braoder distribution of species
+
+### Correspondance Anlysis (CA), Detrended Coresspondance Analysis (DCA), and NMDS
+
+```{r, eval=FALSE}
+# each of these different indirect ordination approaches
+# has different strenghts and weaknesses
+# Correspondance analysis  (CA) examines differences on weighted
+# averages of the columns (i.e., species in this case)
+tree_ca = cca(comm)
+
+# Detrended correspondance analysis (DCA) is identical except it attempts
+# to account for a well known artefact of CA known as the arch-effect 
+# by detrending subsequent axes from previous axes. 
+tree_dca = decorana(comm)
+
+# Non-metric multidimenstional scaling (MDS) is unique in that you may 
+# specify one of a number of different distance metrics to use. By 
+# default the Bray-Curtis distance is used by metaMDS. 
+tree_mds = metaMDS(comm)
+```
+
+NMDS Maximizes rank-order correlation between distance measures and distance in
+ordination space. Points are moved to minimize "stress". Stress is a measure of
+the mismatch between the two kinds of distance.
+
+## Direct or Constrained Ordination
+### Redundancy Analysis (RDA)
+
+First let's carry out an RDA which expects a linear response of each species to
+the environmental variables. RDA is the most direct analog of OLS regression to 
+the multivariate response variable. 
+
+```{r, error=TRUE}
+rda_tree = rda(comm, env) #can use rda like lm, but then need to write out each variable individually
+# the above breaks b/c we have a categorical factor in env 
+
+# vegan requires that we write out each term if we are not going to 
+# convert the factor to a dummy matrix 
+rda_tree = rda(comm ~ env$elev + env$tci +
+env$streamdist + env$disturb + env$beers)
+# alternatively we could use a shorthand approach
+rda_tree = rda(comm ~ . , data=env) #. says to put in all the variables as predictors
+rda_tree
+RsquareAdj(rda_tree)
+```
+#17% expained by the environment, only constrained must be a linear explanation of your variables, a linear equation of explanatory values
+# with 7 explanatory variables
+
+The output above provides us with some useful information. Inertia is another name
+for variation or variance in this case. "Total" refers to total variance, "Constrained"
+refers to the amount of variance explained by the explanatory variables, "Unconstrained"
+refers to the residual variance. Constrained + Unconstrained = Total. 
+An $R^2$ statistic can be derived simply as Constrained / Total. The function 
+`RsquareAdj` computes $R^2$ and $R^2$-adjusted. 
+The variable "Rank" indicates the number of variables included. 
+The eigenvalues are displayed for both the constrained and unconstrained axes. 
+In this context these eigenvalues indicate how much variance each of the axes
+contribute to. 
+
+We can plot our model result to get a sense of which variables are correlating
+with with species along which axes. 
+
+```{r}
+plot(rda_tree, type='n', scaling=1)
+orditorp(rda_tree, display='sp', cex=0.5, scaling=1, col='blue')
+text(rda_tree, display='cn', col='red')
+```
+
+We interpret the plot above as we have interpreted the previously ordination
+plots with one important difference. The environmental variables are now
+displayed and their placement indicates their loading on the two displayed
+RDA axes. `elev` is loading heavily on RDA1 indicating that this variable explains
+a larger portion of the variance associated with axis 1. The location of the 
+species relative to the environmental variables indicates how strongly a species
+is associated with a particular environmental variable. So for example 
+ABIEFRA or *Abies fraseri* increases as elevation increases. 
+
+### Canonical Correspondence Analysis (CCA)
+
+Let's carry out a Canonical Correspondence Analysis (CCA) as well. CCA is appropriate
+for modeling unimodal or hump-shaped responses to explanatory variables (rather
+                                                                         than linear as with RDA). 
+
+```{r}
+cca_tree = cca(comm ~ ., data=env)
+RsquareAdj(cca_tree, 100) #as we fit more parameters in r2 it will increase, however, r2 adjusts the r2 value for any random chance, is it doing better than random variation
+anova(cca_tree, permutations = 999)
+anova(cca_tree, by='margin', permutations = 999)
+
+plot(cca_tree, type='n', scaling=1)
+orditorp(cca_tree, display='sp', cex=0.5, scaling=1, col='blue')
+text(cca_tree, display='bp', col='red')
+```
+#large f value for elevation tells us that it is the most important variable in this
+
+The CCA models don't explain as much variation and their plots look slightly
+different but the general take home message has not changed much. 
+
+### Hypothesis testing
+Now let's carry out hypothesis testing. 
+```{r}
+anova(rda_tree, permutations=10)
+anova(rda_tree, by='margin', permutations=10)
+```
+
+In a real analysis you would specify a much larger number of permutations (at
+                                                                           least 1000). The first test examines overall model fit relative to a randomized
+or permuted matrix of data. The second test examines the partial effects of the
+individual variables included in the model.
+
+### Model Comparison
+Model comparison can be carried out using direct ordination methods either using
+nested models of different degrees of complexity as we did with univariate `lm` 
+type models
+#can still use AIC as well
+
+```{r}
+rda_tree_simple <- update(rda_tree, . ~ . - beers)
+anova(rda_tree_simple, rda_tree)
+```
+
+The above tests suggests that the more complex model including the variable
+`beers` is strongly supported. Note this specific example is identical to the 
+output for the `beers` parameter when using `anova(tree_rda, by = 'margin')`. 
+
+Model comparison can also be undertaken using adjusted $R^2$. This is often 
+easier to discuss and communicate then a myriad of significance tests. 
+
+### Variation Paritioning
+
+Lastly let's carry out variance partitioning. We can use this approach to 
+examine how much of the explained variance is due to different groups of 
+variables. In other words this approach is really only useful if you are
+interested in comparing the relative importance of several variables to another
+set of variables. Lets try to carve out two circles in the box of our data that explains at least about 90% variation
+There might be some overlapping shared fraction that interacts that we can't quite say, then take the difference in their r2 values, 
+do this for communication of the importance of the variables, for latent or endogenous variable
+exogenous are measured variables
+
+```{r}
+## variance partitioning
+
+moisture = env[ , c('elev', 'tci', 'beers', 'streamdist')]
+# because the variable disturb is a factor we need to convert it into 
+# a dummy matrix using the function dummies::dummy
+disturb = dummy(env$disturb)
+
+# examine the explanatory variable of each class of variables.
+varpart(comm, moisture, disturb)
+showvarparts(2)
+```
+Variable outputs are the different complete circles
+x1|x2, would be the nonoverlapping parts
+b is the overlapping sections
+Adjusted r2 for the x1|x2 circle is dominant
+
+can do up to 4 fractions (4 circles), but that is very difficult
+
+The output indicates that the moisture group of variables has the largest
+individual fraction of explained variance (10%), whereas, the disturbance groups
+of variables explain only approximately 2%.
+We can also see that there are not any really large fractions of shared variance 
+which indicates the variables effects are somewhat independent of one another. 
+
+Adjusted r2s are adjusted for the difference in complexity of the models for x1 incorporating more variables while x2 has 1
